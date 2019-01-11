@@ -10,7 +10,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdbool.h>
-
+#include <stdlib.h>
 
 #define FILENAME_MAXSIZE 255
 #define TERMINATOR 1
@@ -29,7 +29,7 @@ struct ACK_ {
 
 struct WRQ_ {
     short int opcode;
-    char wrq_data[FILENAME_MAXSIZE + TERMINATOR + MODE_MAXSIZE + TERMINATOR]; //todo: check if the space is enough
+    char wrq_data[FILENAME_MAXSIZE + TERMINATOR + MODE_MAXSIZE + TERMINATOR];
 }__attribute__((packed));
 
 
@@ -44,19 +44,21 @@ typedef struct DATA_ DATA;
 typedef struct WRQ_ WRQ;
 typedef struct ACK_ ACK;
 
+////////////////////////$  added functions  $///////////////////////////////
 void clearSocket(int socketNum);
 void fatalError(int socketNum, FILE *dataFile);
+
 
 
 ////////////////////////$  Main program  $///////////////////////////////
 int main(int argc, char* argv[]) {
 
-    if(argc != 1 ){ //incorrect number of arguments
-        printf("Error - wrong number of arguments\n");
+    if(argc != 2 ){ //incorrect number of arguments
+        printf("Error - wrong number of arguments %d\n", argc);
         exit(1);
     }
 
-    if (!atoi[1]) { //if not valid number
+    if (!atoi(argv[1])) { //if not valid number
         printf("Error - the argument isn't a number\n");
         exit(1);
     }
@@ -67,9 +69,11 @@ int main(int argc, char* argv[]) {
     struct sockaddr_in servAddr;
     struct sockaddr_in clntAddr;
     unsigned int cliAddrLen;
-    unsigned short servPort = atoi[1];
+    unsigned short servPort = atoi(argv[1]);
     int recvMsgSize;
     fd_set file_des;
+
+
 
     // create socket
     if ((sockNum = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
@@ -105,10 +109,10 @@ int main(int argc, char* argv[]) {
         int ack_block_cntr = 0;
 
         //set the size of the inout parameter
-        cliAddrLen = sizeof(clntAddr);
 
 
         // Receive message from client expecting WRQ block
+        cliAddrLen = sizeof(clntAddr);
         if ((recvMsgSize = recvfrom(sockNum, &wrq_block, PACKET_MAXSIZE, 0,
                                 (struct sockaddr *) &clntAddr, &cliAddrLen)) < 0) {
             perror("TTFTP_ERROR: ");
@@ -158,15 +162,16 @@ int main(int argc, char* argv[]) {
         ack_block.opcode= htons(4);
         ack_block.block_num=htons(ack_block_cntr);
         ack_block_cntr++;
-        if(sendto(sockNum, &ack_block, sizeof(ack_block), NULL, (struct sockaddr *)&clntAddr, sizeof(cliAddrLen)) != sizeof(ack_block)){ // check send all of packet correctly
+        if(sendto(sockNum, &ack_block, sizeof(ack_block), 0, (struct sockaddr *)&clntAddr, sizeof(clntAddr)) != sizeof(ack_block)){ // check send all of packet correctly
             perror("TTFTP_ERROR:");
             fatalError(sockNum, DataFile);
             exit(1);
         }
         else {//sending packet was successful, print that ACK packet was sent to client
-            printf("OUT:ACK, %d\n", 4);
+            printf("OUT:ACK, %d\n", ack_block_cntr-1);
         }
         int timeoutExpiredCount = 0;
+        int last_write_size = 0;
         do {
             do {
 
@@ -186,6 +191,7 @@ int main(int argc, char* argv[]) {
                     if (select_res > 0) {// if there was something at the socket and
                         // we are here not because of a timeout
                         //receiving Data packet
+                        cliAddrLen = sizeof(clntAddr);
                         if((recvMsgSize = recvfrom(sockNum, &data_block, PACKET_MAXSIZE, 0, (struct sockaddr *) &clntAddr, &cliAddrLen)) < 0) {
                             //if recvfrom had systemcall error
                             perror("TTFTP_ERROR: ");
@@ -197,7 +203,7 @@ int main(int argc, char* argv[]) {
 
 
                             //pring data msg
-                            printf("IN:DATA, %d, %d\n", data_block.block_num, sizeof(data_block));
+                            printf("IN:DATA, %d, %d\n", data_block.block_num, recvMsgSize -HEADER_SIZE);
 
                         }
                     }
@@ -206,15 +212,17 @@ int main(int argc, char* argv[]) {
                     {
                         ack_block.opcode= htons(4);
                         ack_block.block_num=htons(ack_block_cntr-1);
-                        if(sendto(sockNum, &ack_block, sizeof(ack_block), NULL, (struct sockaddr *)&clntAddr, sizeof(cliAddrLen)) != sizeof(ack_block)){ // check send all of packet correctly
+                        if(sendto(sockNum, &ack_block, sizeof(ack_block), 0, (struct sockaddr *)&clntAddr, sizeof(clntAddr)) != sizeof(ack_block)){ // check send all of packet correctly
                             perror("TTFTP_ERROR:");
                             fatalError(sockNum, DataFile);
                             exit(1);
                         }
                         else {//sending packet was successful, print that ACK packet was sent to client
-                            printf("OUT:ACK, %d\n", 4);
+                            printf("OUT:ACK, %d\n", ack_block_cntr-1);
                         }
                         timeoutExpiredCount++;
+                        time_out.tv_sec = WAIT_FOR_PACKET_TIMEOUT;
+                        time_out.tv_usec = 0;
                     }
 
                     if (timeoutExpiredCount >= NUMBER_OF_FAILURES) {
@@ -223,16 +231,16 @@ int main(int argc, char* argv[]) {
                         exit(1);
                     }
 
-                } while ((select_res > 0  && recvMsgSize < 0) || (select_res == 0) ); // TODO: Continue while some socket was ready
-                // but recvfrom somehow failed to read the data
+                } while ((select_res > 0  && recvMsgSize < 0) || (select_res == 0) ); // Continue while some socket was ready
+                                                                        // but recvfrom somehow failed to read the data
 
-                if (data_block.opcode != 3) // TODO: We got something else but DATA
+                if (data_block.opcode != 3) // We got something else but DATA
                 {
                     // FATAL ERROR BAIL OUT
                     fatalError(sockNum, DataFile);
                     exit(1);
                 }
-                if (data_block.block_num != ack_block_cntr) {// TODO: The incoming block number is not what we have
+                if (data_block.block_num != ack_block_cntr) {// The incoming block number is not what we have
                     // expected, i.e. this is a DATA pkt but the block number
                     // in DATA was wrong (not last ACK’s block number + 1)
                     // FATAL ERROR BAIL OUT
@@ -242,41 +250,48 @@ int main(int argc, char* argv[]) {
                 }
             } while (false);
             timeoutExpiredCount = 0;
-            if (fprintf(DataFile, data_block.data) < 0) {
+            if ((last_write_size =fwrite(data_block.data, 1, (unsigned int)(recvMsgSize -4), DataFile)) < 0) {
                 perror("TTFTP_ERROR:");
                 fatalError(sockNum, DataFile);
             } else {
-                printf("WRITING: %d",
-                       sizeof(data_block.data)); //after printing to file if data size is smaller than 512 than file was successfully transmitted
+                printf("WRITING: %d\n",
+                       recvMsgSize- HEADER_SIZE); //after printing to file if data size is smaller than 512 than file was successfully transmitted
             }
-            // TODO: send ACK packet to the client
+            if(last_write_size < (unsigned int)recvMsgSize - 4){
+                printf("Error - fwrite() fails");
+                fatalError(sockNum,DataFile);
+                exit(1);
+            }
+
+            // send ACK packet to the client
             ack_block.opcode= htons(4);
             ack_block.block_num=htons(ack_block_cntr);
             ack_block_cntr++;
-            if(sendto(sockNum, &ack_block, sizeof(ack_block), NULL, (struct sockaddr *)&clntAddr, sizeof(cliAddrLen)) != sizeof(ack_block)){ // check send all of packet correctly
+            if(sendto(sockNum, &ack_block, sizeof(ack_block), 0, (struct sockaddr *)&clntAddr, sizeof(clntAddr)) != sizeof(ack_block)){ // check send all of packet correctly
                 perror("TTFTP_ERROR:");
                 fatalError(sockNum, DataFile);
                 exit(1);
             }
             else {//sending packet was successful, print that ACK packet was sent to client
-                printf("OUT:ACK, %d\n", 4);
+                printf("OUT:ACK, %d\n", ack_block_cntr-1);
             }
 
-        } while ( sizeof(data_block) < DATA_MAXSIZE); // Have blocks left to be read from client (not end of transmission)
+        } while ( last_write_size == DATA_MAXSIZE); // Have blocks left to be read from client (not end of transmission)
 
         if(fclose(DataFile)) {
             perror("TTFTP_ERROR:");
         }
-        printf("RECVOK");
+        printf("RECVOK\n");
         clearSocket(sockNum);
     }
+    exit(0);
 }
 
 
 void fatalError(int socketNum, FILE* dataFile){
     clearSocket(socketNum);
     close(socketNum);
-    if(fclose(DataFile)) {
+    if(fclose(dataFile)) {
         perror("TTFTP_ERROR:");
     }
     else
