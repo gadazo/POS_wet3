@@ -1,0 +1,21 @@
+//********************************************
+// function name: main
+// Description: manages the resources as well as receiving and sending packets to and from the client
+// Parameters: argc, argv- the number of arguments and the arguments themselves
+// Returns: int as defined in code
+//**************************************************************************************
+
+//********************************************
+// function name: fatalError
+// Description: handles the resources in case of a fatal error
+// Parameters: socketNum- the number of the socket opened for communication
+//				dataFile pointer to the file to which the data is written to.
+// Returns: NONE
+//**************************************************************************************
+
+//********************************************
+// function name: clearSocket
+// Description: clears data from the socket
+// Parameters: ocketNum- the number of the socket opened for communication
+// Returns: NONE
+//**************************************************************************************
