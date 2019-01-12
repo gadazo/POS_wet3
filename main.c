@@ -17,7 +17,7 @@
 #define MODE_MAXSIZE 255
 #define DATA_MAXSIZE 512
 #define HEADER_SIZE 4
-#define PACKET_MAXSIZE DATA_MAXSIZE+HEADER_SIZE
+#define PACKET_MAXSIZE (DATA_MAXSIZE+HEADER_SIZE)
 #define DATA_MINSIZE 4
 
 ////////////////////////$  Structs  $///////////////////////////////
@@ -98,8 +98,6 @@ int main(int argc, char* argv[]) {
 
     while (true) { //run forever
         struct timeval time_out;
-        time_out.tv_sec = WAIT_FOR_PACKET_TIMEOUT;
-        time_out.tv_usec = 0;
         ACK ack_block;
         WRQ wrq_block;
         DATA data_block;
@@ -182,6 +180,8 @@ int main(int argc, char* argv[]) {
                     FD_SET(sockNum, &file_des);
                     // Wait WAIT_FOR_PACKET_TIMEOUT to see if something appears
                     // for us at the socket (we are waiting for DATA)
+                    time_out.tv_sec = WAIT_FOR_PACKET_TIMEOUT;
+                    time_out.tv_usec = 0;
                     if((select_res = select(sockNum + 1, &file_des, NULL, NULL, &time_out )) < 0){
                         perror("TTFTP_ERROR: ");
                         fatalError(sockNum, DataFile);
@@ -221,8 +221,6 @@ int main(int argc, char* argv[]) {
                             printf("OUT:ACK, %d\n", ack_block_cntr-1);
                         }
                         timeoutExpiredCount++;
-                        time_out.tv_sec = WAIT_FOR_PACKET_TIMEOUT;
-                        time_out.tv_usec = 0;
                     }
 
                     if (timeoutExpiredCount >= NUMBER_OF_FAILURES) {
